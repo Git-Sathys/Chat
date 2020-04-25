@@ -11,6 +11,9 @@
 #include "proto.h"
 #include "string.h"
 
+//nohup ./server.out &
+//ps x
+//kill
 
 // Global variables
 volatile sig_atomic_t flag = 0;
@@ -21,13 +24,21 @@ void catch_ctrl_c_and_exit(int sig) {
     flag = 1;
 }
 
-void recv_msg_handler() {
+
+// Fonction permettant de recevoir un message
+void recv_msg_handler() { 
     char receiveMessage[LENGTH_SEND] = {};
     while (1) {
         int receive = recv(sockfd, receiveMessage, LENGTH_SEND, 0);
-        if (receive > 0) {
+        if (receive > 0) {  
+            if (strcmp(receiveMessage, "stop")==0)
+            {
+                printf("Arret du Serveur\n");
+                exit(EXIT_SUCCESS);
+            }
             printf("\r%s\n", receiveMessage);
-            str_overwrite_stdout();
+            str_overwrite_stdout(nickname);
+            // Fonction permettant d'afficher le nom avant d'écrire le message
         } else if (receive == 0) {
             break;
         } else { 
@@ -36,20 +47,20 @@ void recv_msg_handler() {
     }
 }
 
+// Fonction permettant d'envoyer un message
 void send_msg_handler() {
     char message[LENGTH_MSG] = {};
     while (1) {
-        str_overwrite_stdout();
+        str_overwrite_stdout(nickname);
         while (fgets(message, LENGTH_MSG, stdin) != NULL) {
             str_trim_lf(message, LENGTH_MSG);
             if (strlen(message) == 0) {
-                str_overwrite_stdout();
+                str_overwrite_stdout(nickname);
             } else {
                 break;
             }
         }
         
-       
         if (strcmp(message, "!exit") == 0) {
             break;
         }
@@ -64,15 +75,7 @@ int main()
 {
     signal(SIGINT, catch_ctrl_c_and_exit);
 
-    // Naming
-    printf("Veuillez entrer votre nom: ");
-    if (fgets(nickname, LENGTH_NAME, stdin) != NULL) {
-        str_trim_lf(nickname, LENGTH_NAME);
-    }
-    if (strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
-        printf("\nLe nom doit comporter plus de deux et moins de 30 caractères.\n");
-        exit(EXIT_FAILURE);
-    }
+    
 
     // Create socket
     sockfd = socket(AF_INET , SOCK_STREAM , 0);
@@ -95,6 +98,16 @@ int main()
     int err = connect(sockfd, (struct sockaddr *)&server_info, s_addrlen);
     if (err == -1) {
         printf("Erreur connexion Server !\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Naming
+    printf("Veuillez entrer votre nom: ");
+    if (fgets(nickname, LENGTH_NAME, stdin) != NULL) {
+        str_trim_lf(nickname, LENGTH_NAME);
+    }
+    if (strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
+        printf("\nLe nom doit comporter plus de deux et moins de 30 caractères.\n");
         exit(EXIT_FAILURE);
     }
     
