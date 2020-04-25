@@ -10,6 +10,8 @@
 #include <pthread.h>
 #include "proto.h"
 #include "server.h"
+#include <time.h>
+
 
 // Global variables
 int server_sockfd = 0, client_sockfd = 0;
@@ -28,11 +30,28 @@ void catch_ctrl_c_and_exit(int sig) {
     exit(EXIT_SUCCESS);
 }
 
+int *date(){
+    // int h, min, s;
+    time_t now;
+    static int date[3];
+    // Renvoie l'heure actuelle
+    time(&now);
+    // Convertir au format heure locale
+    struct tm *local = localtime(&now);
+    date[0] = local->tm_hour;
+    date[1] = local->tm_min;
+    date[2] = local->tm_sec;
+    return date;
+}
+
+
 void send_to_all_clients(ClientList *np, char tmp_buffer[]) {
     ClientList *tmp = root->link;
+    int *heure;
+    heure=date();
     while (tmp != NULL) {
         if (np->data != tmp->data) { // all clients except itself.
-            printf("Envoyé à sockfd %d: \"%s\" \n", tmp->data, tmp_buffer);
+            printf("[%i:%i:%i] Envoyé à sockfd %d: \"%s\" \n",heure[0],heure[1], heure[2], tmp->data, tmp_buffer);
             send(tmp->data, tmp_buffer, LENGTH_SEND, 0);
         }
         tmp = tmp->link;
@@ -41,19 +60,25 @@ void send_to_all_clients(ClientList *np, char tmp_buffer[]) {
 
 void send_to_me(ClientList *np, char tmp_buffer[]) {
     ClientList *tmp = root->link;
+    int *heure;
+    heure=date();
     while (tmp != NULL) {
         if (np->data == tmp->data) { // itself.
-            printf("Envoyé à sockfd %d: \"%s\" \n", tmp->data, tmp_buffer);
+            printf("[%i:%i:%i] Envoyé à sockfd %d: \"%s\" \n", heure[0],heure[1], heure[2],tmp->data, tmp_buffer);
             send(tmp->data, tmp_buffer, LENGTH_SEND, 0);
         }
         tmp = tmp->link;
     }
 }
 
+
+
 void user(ClientList *np) { //A upgrate 1 send_to_me
     ClientList *tmp = root->link;
     char send_buffer[LENGTH_SEND] = {};
-    sprintf(send_buffer, "Voici la liste des Users:\n-%s", np->name);
+    int *heure;
+    heure=date();
+    sprintf(send_buffer, "[%i:%i:%i] Voici la liste des Users:\n-%s",heure[0],heure[1], heure[2],np->name);
     send_to_me(np,send_buffer);
     while (tmp != NULL) {
         if (np->data != tmp->data) {
@@ -64,6 +89,20 @@ void user(ClientList *np) { //A upgrate 1 send_to_me
     }
 }
 
+void horaire(ClientList *np) {
+    ClientList *tmp = root->link;
+    char tmp_buffer[LENGTH_SEND];
+    int *heure;
+    heure=date();
+    while (tmp != NULL) {
+        if (np->data == tmp->data) { // itself.
+            sprintf(tmp_buffer,"Il est: %i:%i:%i \n", heure[0],heure[1], heure[2]);
+            printf("[%i:%i:%i] Envoyé à sockfd %d: \"%s\" \n", heure[0],heure[1], heure[2],tmp->data, tmp_buffer);
+            send(tmp->data, tmp_buffer, LENGTH_SEND, 0);
+        }
+        tmp = tmp->link;
+    }
+}
 
 
 void client_handler(void *p_client) {
@@ -72,6 +111,9 @@ void client_handler(void *p_client) {
     char recv_buffer[LENGTH_MSG] = {};
     char send_buffer[LENGTH_SEND] = {};
     ClientList *np = (ClientList *)p_client;
+    int *heure;
+    heure=date();
+     
 
     // NOM
     if (recv(np->data, nickname, LENGTH_NAME, 0) <= 0 || strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
@@ -79,8 +121,8 @@ void client_handler(void *p_client) {
         leave_flag = 1;
     } else {
         strncpy(np->name, nickname, LENGTH_NAME);
-        printf("%s(%s)(%d) a rejoint le salon.\n", np->name, np->ip, np->data); //Affichage serveur
-        sprintf(send_buffer, "%s (%d) a rejoint le salon.", np->name, np->data);   //Affichage client
+        printf("[%i:%i:%i] %s(%s)(%d) a rejoint le salon.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur
+        sprintf(send_buffer, "[%i:%i:%i] %s (%d) a rejoint le salon.",heure[0],heure[1], heure[2], np->name, np->data);   //Affichage client
         send_to_all_clients(np, send_buffer);                                   //Affichage client
     }
 
@@ -95,21 +137,35 @@ void client_handler(void *p_client) {
             if (strlen(recv_buffer) == 0) {
                 continue;
             }
-            sprintf(send_buffer, "%s (%d)：%s", np->name, np->data, recv_buffer);  //Afichage du msg Nom User(data): msg
+            sprintf(send_buffer, "[%i:%i:%i] %s (%d)：%s",heure[0],heure[1], heure[2], np->name, np->data, recv_buffer);  //Afichage du msg Nom User(data): msg
+            
         } else if (receive == 0 || strcmp(recv_buffer, "!exit") == 0) {
-            printf("%s(%s)(%d) a quitté le salon.\n", np->name, np->ip, np->data);
-            sprintf(send_buffer, "%s(%s) a quitté le salon.", np->name, np->ip);
+            printf("[%i:%i:%i] %s(%s)(%d) a quitté le salon.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data);
+            sprintf(send_buffer, "[%i:%i:%i] %s (%d) a quitté le salon.",heure[0],heure[1], heure[2], np->name, np->data);
             leave_flag = 1;
         }
         else {
             printf("Fatal Error: -1\n");
             leave_flag = 1;
         }
-        if(strcmp(recv_buffer, "!user")!=0){ //msg!="!user"
-            send_to_all_clients(np, send_buffer);
-        }else{
-        printf("%s(%s)(%d) a utilisé la commande !user.\n", np->name, np->ip, np->data); //Affichage serveur    
-        user(np);
+
+        if(strcmp(recv_buffer, "!user")==0){
+            printf("[%i:%i:%i] %s(%s)(%d) a utilisé la commande !user.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur    
+            user(np);
+        }else if (strcmp(&recv_buffer[0], "!mp")==0)
+              {
+                printf("[%i:%i:%i] %s(%s)(%d) a utilisé la commande !mp.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur 
+                //mp(np->data);
+              }
+              else if (strcmp(&recv_buffer[0], "!time")==0)
+              {
+                printf("[%i:%i:%i] %s(%s)(%d) a utilisé la commande !h.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur    
+                horaire(np);
+              }
+
+        else
+        {
+        send_to_all_clients(np, send_buffer);
         }
 
         

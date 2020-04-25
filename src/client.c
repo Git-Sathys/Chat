@@ -11,6 +11,7 @@
 #include "proto.h"
 #include "string.h"
 
+
 // Global variables
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
