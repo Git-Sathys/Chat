@@ -8,16 +8,21 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include "proto.h"
 #include "string.h"
 
-//nohup ./server.out &
-//ps x
-//kill
+// Port d'écoute de la socket
+#define PORT 8888
+// Adresse d'écoute (toutes les adresses)
+#define IP "148.100.86.184"
+
+#define LENGTH_NAME 31
+#define LENGTH_MSG 101
+#define LENGTH_SEND 201
 
 // Global variables
 volatile sig_atomic_t flag = 0;
 int sockfd = 0;
+int verrif = 0;
 char nickname[LENGTH_NAME] = {};
 
 void catch_ctrl_c_and_exit(int sig) {
@@ -31,21 +36,19 @@ void recv_msg_handler() {
     while (1) {
         int receive = recv(sockfd, receiveMessage, LENGTH_SEND, 0);
         if (receive > 0) {  
-            if (strcmp(receiveMessage, "stop")==0)
-            {
-                printf("Arret du Serveur\n");
-                exit(EXIT_SUCCESS);
-            }
             printf("\r%s\n", receiveMessage);
-            str_overwrite_stdout(nickname);
-            // Fonction permettant d'afficher le nom avant d'écrire le message
+            str_overwrite_stdout(nickname);      // Fonction permettant d'afficher le nom avant d'écrire le message
         } else if (receive == 0) {
-            break;
+            printf("\nArret du serveur");
+            break; 
         } else { 
-            // -1 
+            printf("\nUne erreur est survenu");
+            break;
         }
     }
+    catch_ctrl_c_and_exit(2);
 }
+
 
 // Fonction permettant d'envoyer un message
 void send_msg_handler() {
@@ -60,13 +63,10 @@ void send_msg_handler() {
                 break;
             }
         }
-        
         if (strcmp(message, "!exit") == 0) {
             break;
         }
          send(sockfd, message, LENGTH_MSG, 0);
-        
-        
     }
     catch_ctrl_c_and_exit(2);
 }
@@ -77,26 +77,27 @@ int main()
 
     
 
-    // Create socket
-    sockfd = socket(AF_INET , SOCK_STREAM , 0);
+    // Création de la socket
+    sockfd = socket(AF_INET , SOCK_STREAM , 0);  //IPv4 protocol, TCP, protocol
     if (sockfd == -1) {
         printf("Erreur création socket.");
         exit(EXIT_FAILURE);
     }
 
-    // Socket information
+    // Initialisation de la structure sockaddr_in
     struct sockaddr_in server_info, client_info;
     int s_addrlen = sizeof(server_info);
     int c_addrlen = sizeof(client_info);
-    memset(&server_info, 0, s_addrlen);
-    memset(&client_info, 0, c_addrlen);
+    // memset(&server_info, 0, s_addrlen);
+    // memset(&client_info, 0, c_addrlen);
     server_info.sin_family = AF_INET;
-    server_info.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server_info.sin_port = htons(8888);
+    server_info.sin_addr.s_addr = inet_addr(IP);
+    server_info.sin_port = htons(PORT);
 
-    // Connect to Server
-    int err = connect(sockfd, (struct sockaddr *)&server_info, s_addrlen);
-    if (err == -1) {
+
+    // Verrification du serveur on
+    verrif = connect(sockfd, (struct sockaddr *)&server_info, s_addrlen);
+    if (verrif == -1) {
         printf("Erreur connexion Server !\n");
         exit(EXIT_FAILURE);
     }
@@ -104,7 +105,7 @@ int main()
     // Naming
     printf("Veuillez entrer votre nom: ");
     if (fgets(nickname, LENGTH_NAME, stdin) != NULL) {
-        str_trim_lf(nickname, LENGTH_NAME);
+        str_trim_lf(nickname, LENGTH_NAME); // remplace le \n de la saisie par un \0
     }
     if (strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
         printf("\nLe nom doit comporter plus de deux et moins de 30 caractères.\n");
@@ -115,7 +116,6 @@ int main()
     getsockname(sockfd, (struct sockaddr*) &client_info, (socklen_t*) &c_addrlen);
     getpeername(sockfd, (struct sockaddr*) &server_info, (socklen_t*) &s_addrlen);
     printf("Connexion au Server: %s:%d\n", inet_ntoa(server_info.sin_addr), ntohs(server_info.sin_port));
-    //printf("Tu es: %s:%d\n", inet_ntoa(client_info.sin_addr), ntohs(client_info.sin_port));
 
     send(sockfd, nickname, LENGTH_NAME, 0);
 
@@ -133,7 +133,7 @@ int main()
 
     while (1) {
         if(flag) {
-            printf("\nBye\n");
+            printf("\nMerci à bientôt\n");
             break;
         }
     }
