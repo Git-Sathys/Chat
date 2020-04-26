@@ -14,14 +14,22 @@
 
 // Port d'écoute de la socket
 #define PORT 8888
-// Adresse d'écoute (toutes les adresses)
+// Adresse du serveur
 #define IP "127.0.0.1"
 // Taille de la file d'attente
 #define BACKLOG 5
 
+//Taille
 #define LENGTH_NAME 31
-#define LENGTH_MSG 101
+#define LENGTH_MSG 201
 #define LENGTH_SEND 201
+
+//Couleur
+#define RED      "\033[0;31m"
+#define YELLOW   "\033[0;33m"
+#define BLUE     "\033[0;34m"
+#define NORMAL   "\033[00m"
+
 
 // Global variables
 int server_sockfd = 0, client_sockfd = 0;
@@ -31,7 +39,7 @@ ClientList *root, *now;
 int *date(){
     // int h, min, s;
     time_t now;
-    static int date[3];
+    static int date[6];
     // Renvoie l'heure actuelle
     time(&now);
     // Convertir au format heure locale
@@ -39,6 +47,10 @@ int *date(){
     date[0] = local->tm_hour;
     date[1] = local->tm_min;
     date[2] = local->tm_sec;
+    date[3]= local->tm_mday;          
+    date[4] = local->tm_mon + 1;     
+    date[5] = local->tm_year + 1900;
+
     return date;
 }
 
@@ -52,7 +64,7 @@ int info_log(char message[])
   heure=date();
   if (pFile!=NULL)
   {
-    sprintf(msg,"[%02d:%02d:%02d] %s\n",heure[0],heure[1], heure[2],message);
+    sprintf(msg,"[%02d/%02d/%d] [%02d:%02d:%02d] %s\n",heure[3],heure[4], heure[5], heure[0],heure[1], heure[2],message);
     fputs (msg,pFile);
     fclose (pFile);
   }
@@ -77,13 +89,13 @@ void send_to_all_clients(ClientList *np, char message[]) {
 void catch_ctrl_c_and_exit(int sig) {
     ClientList *tmp= root->link;
     while (root != NULL) {
-        printf("\nsocketfd fermé: %d\n", root->data);
+        printf("Fermeture des socket\n");
         close(root->data); // close all socket include server_sockfd
         tmp = root;
         root = root->link;
         free(tmp);
     }
-    printf("Bye\n");
+    printf("Arret du serveur\n");
     info_log("Server Stop");
     exit(EXIT_SUCCESS);
 }
@@ -141,7 +153,7 @@ void mp(char saisie[], char *name) {
     for (i = 0; i < strlen(saisie) + 2; i++){
         envoie[i] = saisie[i+2];
     }
-    sprintf(message, "Mp de %s : %s", name, envoie);
+    sprintf(message, YELLOW"Mp de %s :"NORMAL" %s", name, envoie);
     send(data, message, LENGTH_MSG, 0);
 }
 
@@ -157,12 +169,12 @@ void client_handler(void *p_client) {
 
     // NOM
     if (recv(np->data, nickname, LENGTH_NAME, 0) <= 0 || strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
-        printf("%s n'a pas entré de nom.\n", np->ip);
+        printf(RED"%s n'a pas entré de nom.\n"NORMAL, np->ip);
         leave_flag = 1;
     } else {
         strncpy(np->name, nickname, LENGTH_NAME);
         printf("[%02d:%02d:%02d] %s(%s)(%d) a rejoint le salon.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur
-        sprintf(message_send, "[%02d:%02d:%02d] %s (%d) a rejoint le salon.",heure[0],heure[1], heure[2], np->name, np->data);   //Affichage client
+        sprintf(message_send, "[%02d:%02d:%02d] "BLUE"%s (%d) a rejoint le salon."NORMAL,heure[0],heure[1], heure[2], np->name, np->data);   //Affichage client
         send_to_all_clients(np, message_send);                                   //Affichage client
         sprintf(message_send,"%s(%s)(%d) a rejoint le salon",np->name, np->ip, np->data);
         info_log(message_send);
@@ -186,7 +198,7 @@ void client_handler(void *p_client) {
             leave_flag = 1;
             sprintf(message_send,"%s(%s)(%d) a quitté le salon",np->name, np->ip, np->data);
             info_log(message_send);
-            sprintf(message_send, "[%02d:%02d:%02d] %s (%d) a quitté le salon.",heure[0],heure[1], heure[2], np->name, np->data);
+            sprintf(message_send, "[%02d:%02d:%02d]"BLUE" %s (%d) a quitté le salon."NORMAL,heure[0],heure[1], heure[2], np->name, np->data);
            
         }
         else {
@@ -240,13 +252,12 @@ int main()
 {
     
     signal(SIGINT, catch_ctrl_c_and_exit);
-
+    char error_send[LENGTH_SEND] = {};
+    
     // Initialisation de la structure sockaddr_in
     struct sockaddr_in server_info, client_info;
     int s_addrlen = sizeof(server_info);
     int c_addrlen = sizeof(client_info);
-    // memset(&server_info, 0, s_addrlen);
-    // memset(&client_info, 0, c_addrlen);
     server_info.sin_family = AF_INET;
     server_info.sin_addr.s_addr = inet_addr(IP);
     server_info.sin_port = htons(PORT);
@@ -254,13 +265,17 @@ int main()
     // Création de la socket en TCP
 	if ((server_sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
 		printf("Echéc de la création: %s\n", strerror(errno));
+        sprintf(error_send,"Echéc de la création: %s", strerror(errno));
+        info_log(error_send);
 		exit(EXIT_FAILURE);
 	}
-    printf("Création de la socket\n");     
+    printf("Création de la socket\n");
 
     // Attachement de la socket sur le port et l'adresse IP
 	if (bind(server_sockfd, (struct sockaddr *)&server_info, s_addrlen)) {
 		printf("Echéc d'attachement: %s\n", strerror(errno));
+        sprintf(error_send,"Echéc d'attachement: %s", strerror(errno));
+        info_log(error_send);
 		exit(EXIT_FAILURE);
 	}
 	printf("Attachement de la socket sur le port %i\n", PORT);
@@ -268,13 +283,14 @@ int main()
 	// Passage en écoute de la socket
 	if (listen(server_sockfd, BACKLOG) != 0) {
 		printf("Echéc de la mise en écoute: %s\n", strerror(errno));
+        sprintf(error_send,"Echéc de la mise en écoute: %s", strerror(errno));
+        info_log(error_send);
 		exit(EXIT_FAILURE);
 	}
 
-
     // Affichage Server IP
     getsockname(server_sockfd, (struct sockaddr*) &server_info, (socklen_t*) &s_addrlen);
-    printf("Start Server on: %s:%d\n", inet_ntoa(server_info.sin_addr), ntohs(server_info.sin_port));
+    printf("Start Server on: %s:%d\n", inet_ntoa(server_info.sin_addr), ntohs(server_info.sin_port) );
     info_log("Start Server");
 
     // Initial linked list for users
@@ -292,10 +308,11 @@ int main()
 
         pthread_t id;
         if (pthread_create(&id, NULL, (void *)client_handler, (void *)c) != 0) {
-            perror("Création thread erreur!\n");
+            printf("Echéc de la mise en écoute: %s\n",strerror(errno));
+            sprintf(error_send,"Echéc de la mise en écoute %s",strerror(errno));
+            info_log(error_send);
             exit(EXIT_FAILURE);
         }
     }
-
     return 0;
 }
