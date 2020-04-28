@@ -18,12 +18,10 @@
 #define IP "127.0.0.1"
 // Taille de la file d'attente
 #define BACKLOG 5
-
 //Taille
 #define LENGTH_NAME 31
 #define LENGTH_MSG 201
 #define LENGTH_SEND 201
-
 //Couleur
 #define RED      "\033[0;31m"
 #define YELLOW   "\033[0;33m"
@@ -33,7 +31,8 @@
 
 // Global variables
 int server_sockfd = 0, client_sockfd = 0;
-ClientList *root, *now;
+ClientList *user, *now;
+char error_send[LENGTH_SEND] = {};
 
 //Fonction return date tableau
 int *date(){
@@ -64,7 +63,7 @@ int info_log(char message[])
   heure=date();
   if (pFile!=NULL)
   {
-    sprintf(msg,"[%02d/%02d/%d] [%02d:%02d:%02d] %s\n",heure[3],heure[4], heure[5], heure[0],heure[1], heure[2],message);
+    sprintf(msg,"[%02d/%02d/%i] [%02d:%02d:%02d] %s\n",heure[3],heure[4], heure[5], heure[0],heure[1], heure[2],message);
     fputs (msg,pFile);
     fclose (pFile);
   }
@@ -72,111 +71,130 @@ int info_log(char message[])
 }
 
 //Fonction pour envoyer un msg aux autres personnes
-void send_to_all_clients(ClientList *np, char message[]) {
-    ClientList *tmp = root->link;
+void send_to_all_clients(ClientList *client, char message[]) {
+    ClientList *all_client = user->link;
     int *heure;
     heure=date();
-    while (tmp != NULL) {
-        if (np->data != tmp->data) { // all clients except itself.
-            printf("[%02d:%02d:%02d] Envoyé à User %d: \"%s\" \n",heure[0],heure[1], heure[2], tmp->data, message);
-            send(tmp->data, message, LENGTH_SEND, 0);
+    while (all_client != NULL) {
+        if (client->data != all_client->data) { // tous les clients sauf lui
+            printf("[%02d:%02d:%02d] Envoyé à User %i: \"%s\" \n",heure[0],heure[1], heure[2], all_client->data, message);
+            send(all_client->data, message, LENGTH_SEND, 0);
         }
-        tmp = tmp->link;//Voir à quoi ça sert
+        all_client = all_client->link;//Voir à quoi ça sert
     }
 }
 
+
+//Fonction pour envoyer un msg à une seul personne
+void send_to_one(ClientList *client, char message[]) {
+    int *heure;
+    heure=date();
+    printf("[%02d:%02d:%02d] Envoyé à User %i: \"%s\" \n", heure[0],heure[1], heure[2],client->data, message);
+    send(client->data, message, LENGTH_SEND, 0);
+}
+
+
 //Fonction pour arreter le serveur
 void catch_ctrl_c_and_exit(int sig) {
-    ClientList *tmp= root->link;
-    while (root != NULL) {
-        printf("Fermeture des socket\n");
-        close(root->data); // close all socket include server_sockfd
-        tmp = root;
-        root = root->link;
-        free(tmp);
+    ClientList *all_client= user->link;
+    while (user != NULL) {
+        close(user->data); // close all socket include server_sockfd
+        all_client = user;
+        user = user->link;
+        free(all_client);
     }
+    printf("Fermeture des socket \n");
     printf("Arret du serveur\n");
     info_log("Server Stop");
     exit(EXIT_SUCCESS);
 }
 
-//Fonction pour envoyer un msg à une seul personne
-void send_to_me(ClientList *np, char message[]) {
-    ClientList *tmp = root->link;
-    int *heure;
-    heure=date();
-    while (tmp != NULL) {
-        if (np->data == tmp->data) { // itself.
-            printf("[%02d:%02d:%02d] Envoyé à User %d: \"%s\" \n", heure[0],heure[1], heure[2],tmp->data, message);
-            send(tmp->data, message, LENGTH_SEND, 0);
-        }
-        tmp = tmp->link;
-    }
-}
+
 
 //[Commande] pour afficher les users du serveur
-void user(ClientList *np) { //A upgrate 1 send_to_me
-    ClientList *tmp = root->link;
+void C_user(ClientList *client) {
+    ClientList *all_client = user->link;
     char message[LENGTH_SEND] = {};
-    sprintf(message, "Voici la liste des Users:\n-%s (%d)",np->name, np->data);
-    send_to_me(np,message);
-    while (tmp != NULL) {
-        if (np->data != tmp->data) {
-        sprintf(message,"-%s (%d)", tmp->name, tmp->data);
-        send_to_me(np,message);
+    sprintf(message, "Voici la liste des Users:\n-%s (%i)",client->name, client->data);
+    send_to_one(client,message);
+    while (all_client != NULL) {
+        if (client->data != all_client->data) {
+        sprintf(message,"-%s (%i)", all_client->name, all_client->data);
+        send_to_one(client,message);
         }
-        tmp = tmp->link;
+        all_client = all_client->link;
     }
 }
 
 //[Commande] pour afficher l'horaire du serveur
-void horaire(ClientList *np) {
-    ClientList *tmp = root->link;
+void C_horaire(ClientList *client) {
     char message[LENGTH_SEND];
     int *heure;
     heure=date();
-    while (tmp != NULL) {
-        if (np->data == tmp->data) { // itself.
-            sprintf(message,"Il est:  %02d:%02d:%02d", heure[0],heure[1], heure[2]);
-            printf("[%02d:%02d:%02d] Envoyé à User %d: \"%s\" \n", heure[0],heure[1], heure[2],tmp->data, message);
-            send(tmp->data, message, LENGTH_SEND, 0);
-        }
-        tmp = tmp->link;
-    }
+    sprintf(message,"Il est:  %02d:%02d:%02d", heure[0],heure[1], heure[2]);
+    printf("[%02d:%02d:%02d] Envoyé à User %d: \"%s\" \n", heure[0],heure[1], heure[2],client->data, message);
+    send_to_one(client,message);
 }
 
-void mp(char saisie[], char *name) {
-    int data = saisie[0] - 48;
+//[Commande] pour envoyer un message privé
+void C_mp(char saisie[], ClientList *client) {
+    ClientList * all_client = user->link;
+    int  valeur1 = saisie[0] - 48;
+    int data;
+    char data1[2];
+    char data2[2];
     int i;
     char message[LENGTH_MSG];
     char envoie[LENGTH_MSG];
-    for (i = 0; i < strlen(saisie) + 2; i++){
-        envoie[i] = saisie[i+2];
+    int msg1 = 0;
+    if (saisie[1]>47 && saisie[1]<58)
+    {
+        int valeur2 = saisie[1] - 48;
+        sprintf(data1, "%i", valeur1);
+        sprintf(data2, "%i", valeur2);
+        strcat(data1, data2);
+        data=atoi(data1);
+    }else{
+        data=saisie[0]-48;
     }
-    sprintf(message, YELLOW"Mp de %s :"NORMAL" %s", name, envoie);
-    send(data, message, LENGTH_MSG, 0);
+    while(all_client != NULL){
+        if(data == all_client->data){
+            for (i = 0; i < strlen(saisie) + 2; i++){
+            envoie[i] = saisie[i+2];
+            }
+            sprintf(message, YELLOW"Mp de %s :"NORMAL" %s", client->name, envoie);
+            send(data, message, LENGTH_MSG, 0);
+            msg1 = 1;
+        }
+    all_client = all_client->link;
+    }
+    if (msg1 == 0) {
+        sprintf(message, RED"Le client : %i n'existe pas"NORMAL , data);
+        send(client->data, message, LENGTH_MSG, 0);  
+    }
 }
+
 
 void client_handler(void *p_client) {
     int leave_flag = 0;
     char nickname[LENGTH_NAME] = {};
     char message_saisi[LENGTH_MSG] = {};
     char message_send[LENGTH_SEND] = {};
-    ClientList *np = (ClientList *)p_client;
+    ClientList *client = (ClientList *)p_client;
     int *heure;
     heure=date();
      
 
     // NOM
-    if (recv(np->data, nickname, LENGTH_NAME, 0) <= 0 || strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
-        printf(RED"%s n'a pas entré de nom.\n"NORMAL, np->ip);
+    if (recv(client->data, nickname, LENGTH_NAME, 0) <= 0 || strlen(nickname) < 2 || strlen(nickname) >= LENGTH_NAME-1) {
+        printf(RED"%s n'a pas entré de nom.\n"NORMAL, client->ip);
         leave_flag = 1;
     } else {
-        strncpy(np->name, nickname, LENGTH_NAME);
-        printf("[%02d:%02d:%02d] %s(%s)(%d) a rejoint le salon.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur
-        sprintf(message_send, "[%02d:%02d:%02d] "BLUE"%s (%d) a rejoint le salon."NORMAL,heure[0],heure[1], heure[2], np->name, np->data);   //Affichage client
-        send_to_all_clients(np, message_send);                                   //Affichage client
-        sprintf(message_send,"%s(%s)(%d) a rejoint le salon",np->name, np->ip, np->data);
+        strncpy(client->name, nickname, LENGTH_NAME);
+        printf("[%02d:%02d:%02d] %s(%s)(%i) a rejoint le salon.\n",heure[0],heure[1], heure[2], client->name, client->ip, client->data); //Affichage serveur
+        sprintf(message_send, "[%02d:%02d:%02d] "BLUE"%s (%i) a rejoint le salon."NORMAL,heure[0],heure[1], heure[2], client->name, client->data);   //Affichage client
+        send_to_all_clients(client, message_send);                                   //Affichage client
+        sprintf(message_send,"%s(%s)(%i) a rejoint le salon",client->name, client->ip, client->data);
         info_log(message_send);
     }
 
@@ -185,20 +203,20 @@ void client_handler(void *p_client) {
         if (leave_flag) {
             break;
         }
-        int receive = recv(np->data, message_saisi, LENGTH_MSG, 0);
+        int receive = recv(client->data, message_saisi, LENGTH_MSG, 0);
  
         if (receive > 0) {
             if (strlen(message_saisi) == 0) {
                 continue;
             }
-            sprintf(message_send, "[%02d:%02d:%02d] %s (%d)：%s",heure[0],heure[1], heure[2], np->name, np->data, message_saisi);  //message du msg Nom User(data): msg
+            sprintf(message_send, "[%02d:%02d:%02d] %s (%i)：%s",heure[0],heure[1], heure[2], client->name, client->data, message_saisi);  //message du msg Nom User(data): msg
            
         } else if (receive == 0 || strcmp(message_saisi, "!exit") == 0) {
-            printf("[%02d:%02d:%02d] %s(%s) a quitté le salon.\n",heure[0],heure[1], heure[2], np->name, np->ip);
+            printf("[%02d:%02d:%02d] %s(%s) a quitté le salon.\n",heure[0],heure[1], heure[2], client->name, client->ip);
             leave_flag = 1;
-            sprintf(message_send,"%s(%s)(%d) a quitté le salon",np->name, np->ip, np->data);
+            sprintf(message_send,"%s(%s)(%i) a quitté le salon",client->name, client->ip, client->data);
             info_log(message_send);
-            sprintf(message_send, "[%02d:%02d:%02d]"BLUE" %s (%d) a quitté le salon."NORMAL,heure[0],heure[1], heure[2], np->name, np->data);
+            sprintf(message_send, "[%02d:%02d:%02d]"BLUE" %s (%i) a quitté le salon."NORMAL,heure[0],heure[1], heure[2], client->name, client->data);
            
         }
         else {
@@ -207,52 +225,52 @@ void client_handler(void *p_client) {
         }
 
         if(strcmp(message_saisi, "!user")==0){ //commandes TODO petit bug !exit
-            printf("[%02d:%02d:%02d] %s(%s)(%d) a utilisé la commande !user.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur    
-            user(np);
+            printf("[%02d:%02d:%02d] %s(%s)(%i) a utilisé la commande !user.\n",heure[0],heure[1], heure[2], client->name, client->ip, client->data); //Affichage serveur    
+            C_user(client);
             sprintf(message_saisi," ");
         }
                 else if (strcmp(message_saisi, "!time")==0)
               {
-                printf("[%02d:%02d:%02d] %s(%s)(%d) a utilisé la commande !time.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data); //Affichage serveur    
-                horaire(np);
+                printf("[%02d:%02d:%02d] %s(%s)(%i) a utilisé la commande !time.\n",heure[0],heure[1], heure[2], client->name, client->ip, client->data); //Affichage serveur    
+                C_horaire(client);
                 sprintf(message_saisi," ");
               }
                 else if (strcmp(message_saisi, "!help")==0)
               {
-                printf("[%02d:%02d:%02d] %s(%s)(%d) a utilisé la commande !help.\n",heure[0],heure[1], heure[2], np->name, np->ip, np->data);
+                printf("[%02d:%02d:%02d] %s(%s)(%i) a utilisé la commande !help.\n",heure[0],heure[1], heure[2], client->name, client->ip, client->data);
                 sprintf(message_send, "Voici les commandes:\n-!user -> Liste les utilisateurs connectés\n-!time -> Pour afficher l'heure\n-!mp [numero user] [msg]\n-!exit -> Pour fermer l'application");
-                send_to_me(np, message_send);
+                send_to_one(client, message_send);
                 sprintf(message_saisi," ");
               }
                 else if (strncmp(message_saisi, "!mp",3)==0)
               {
                 printf("mp envpoyé à : %s\n",message_saisi+4);
-                mp(message_saisi+4, np->name);
+                C_mp(message_saisi+4, client);
                 sprintf(message_saisi," ");
               }
                 else
                 {
-                    send_to_all_clients(np, message_send);
+                    send_to_all_clients(client, message_send);
                 }
     }
 
     // Remove Node
-    close(np->data);
-    if (np == now) { // remove an edge node
-        now = np->prev;
+    close(client->data);
+    if (client == now) { // remove an edge node
+        now = client->prev;
         now->link = NULL;
     } else { // remove a middle node
-        np->prev->link = np->link;
-        np->link->prev = np->prev;
+        client->prev->link = client->link;
+        client->link->prev = client->prev;
     }
-    free(np);
+    free(client);
 }
 
 int main()
 {
     
     signal(SIGINT, catch_ctrl_c_and_exit);
-    char error_send[LENGTH_SEND] = {};
+    signal(SIGTERM, catch_ctrl_c_and_exit);
     
     // Initialisation de la structure sockaddr_in
     struct sockaddr_in server_info, client_info;
@@ -290,12 +308,12 @@ int main()
 
     // Affichage Server IP
     getsockname(server_sockfd, (struct sockaddr*) &server_info, (socklen_t*) &s_addrlen);
-    printf("Start Server on: %s:%d\n", inet_ntoa(server_info.sin_addr), ntohs(server_info.sin_port) );
+    printf("Start Server on: %s:%i\n", inet_ntoa(server_info.sin_addr), ntohs(server_info.sin_port) );
     info_log("Start Server");
 
     // Initial linked list for users
-    root = newNode(server_sockfd, inet_ntoa(server_info.sin_addr));
-    now = root;
+    user = newNode(server_sockfd, inet_ntoa(server_info.sin_addr));
+    now = user;
 
     while (1) {
         client_sockfd = accept(server_sockfd, (struct sockaddr*) &client_info, (socklen_t*) &c_addrlen);

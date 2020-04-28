@@ -14,16 +14,16 @@
 #define PORT 8888
 // Adresse d'écoute
 #define IP "127.0.0.1"
-
+//Taille
 #define LENGTH_NAME 31
 #define LENGTH_MSG 101
 #define LENGTH_SEND 201
-
 //Couleur
 #define RED      "\033[0;31m"
 #define YELLOW   "\033[0;33m"
 #define NORMAL   "\033[00m"
 #define BLUE     "\033[00;34m"
+
 
 // Global variables
 volatile sig_atomic_t flag = 0;
@@ -43,7 +43,7 @@ void recv_msg_handler() {
         int receive = recv(sockfd, receiveMessage, LENGTH_SEND, 0);
         if (receive > 0) {  
             printf("\r%s\n", receiveMessage);
-            str_overwrite_stdout(nickname);      // Fonction permettant d'afficher le nom avant d'écrire le message
+            str_overwrite_stdout();      // Fonction permettant d'afficher le nom avant d'écrire le message
         } else if (receive == 0) {
             printf(BLUE "\nArret du serveur"NORMAL);
             break; 
@@ -62,7 +62,7 @@ void send_msg_handler() {
     while (1) {
         str_overwrite_stdout(nickname);
         while (fgets(message, LENGTH_MSG, stdin) != NULL) {
-            str_trim_lf(message, LENGTH_MSG);
+            str_trim_lf(message, LENGTH_MSG);  // remplace le \n de la saisie par un \0
             if (strlen(message) == 0) {
                 str_overwrite_stdout(nickname);
             } else {
@@ -80,14 +80,12 @@ void send_msg_handler() {
 int main()
 {
     signal(SIGINT, catch_ctrl_c_and_exit);
-
-    
+    signal(SIGTERM, catch_ctrl_c_and_exit);
 
     // Création de la socket
     sockfd = socket(AF_INET , SOCK_STREAM , 0);  //IPv4 protocol, TCP, protocol
     if (sockfd == -1) {
         printf(RED "Erreur création socket."NORMAL);
-        
         exit(EXIT_FAILURE);
     }
 
@@ -108,7 +106,7 @@ int main()
     }
 
     // Naming
-   do
+    do
     {
     printf(YELLOW"Veuillez entrer votre nom: "NORMAL);
     if (fgets(nickname, LENGTH_NAME, stdin) != NULL) {
