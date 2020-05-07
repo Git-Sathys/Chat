@@ -7,3 +7,5 @@ make
 ./server.out
 ./client.out
 ```
+
+Thomas // Mehdi
